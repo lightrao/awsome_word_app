@@ -1,6 +1,8 @@
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 
 void main() {
   runApp(MyApp());
@@ -28,20 +30,90 @@ class MyApp extends StatelessWidget {
 // define the state
 class MyAppState extends ChangeNotifier {
   WordPair current = WordPair.random();
+  var favorites = <WordPair>[];
+  late Database _database;
+  bool _isDatabaseInitialized = false;
+
+  // Constructor to initialize database and load favorites
+  MyAppState() {
+    _initDatabase();
+  }
+
+  // Initialize the database
+  Future<void> _initDatabase() async {
+    // Avoid database initialization if it's already done
+    if (_isDatabaseInitialized) return;
+    
+    final databasesPath = await getDatabasesPath();
+    final path = join(databasesPath, 'word_app.db');
+
+    _database = await openDatabase(
+      path,
+      version: 1,
+      onCreate: (Database db, int version) async {
+        await db.execute(
+          'CREATE TABLE favorites(id INTEGER PRIMARY KEY, first TEXT, second TEXT)',
+        );
+      },
+    );
+    
+    _isDatabaseInitialized = true;
+    await loadFavorites();
+  }
 
   void getNext() {
     current = WordPair.random();
     notifyListeners();
   }
 
-  var favorites = <WordPair>[];
-
   void toggleFavorite() {
     if (favorites.contains(current)) {
       favorites.remove(current);
+      _deleteFavorite(current);
     } else {
       favorites.add(current);
+      _saveFavorite(current);
     }
+    notifyListeners();
+  }
+
+  // Save a favorite to the database
+  Future<void> _saveFavorite(WordPair pair) async {
+    if (!_isDatabaseInitialized) await _initDatabase();
+    
+    await _database.insert(
+      'favorites',
+      {
+        'first': pair.first,
+        'second': pair.second,
+      },
+    );
+  }
+
+  // Delete a favorite from the database
+  Future<void> _deleteFavorite(WordPair pair) async {
+    if (!_isDatabaseInitialized) await _initDatabase();
+    
+    await _database.delete(
+      'favorites',
+      where: 'first = ? AND second = ?',
+      whereArgs: [pair.first, pair.second],
+    );
+  }
+
+  // Load favorites from the database
+  Future<void> loadFavorites() async {
+    if (!_isDatabaseInitialized) await _initDatabase();
+    
+    final List<Map<String, dynamic>> maps = await _database.query('favorites');
+    
+    favorites = List.generate(maps.length, (i) {
+      return WordPair(
+        maps[i]['first'],
+        maps[i]['second'],
+      );
+    });
+    
     notifyListeners();
   }
 }
