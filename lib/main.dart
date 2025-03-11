@@ -33,10 +33,16 @@ class MyAppState extends ChangeNotifier {
   var favorites = <WordPair>[];
   late Database _database;
   bool _isDatabaseInitialized = false;
+  
+  // Add a history list to track previous word pairs
+  var history = <WordPair>[];
+  int historyIndex = -1;  // Track current position in history
 
   // Constructor to initialize database and load favorites
   MyAppState() {
     _initDatabase();
+    // Add the initial random word pair to history
+    _addToHistory(current);
   }
 
   // Initialize the database
@@ -62,8 +68,38 @@ class MyAppState extends ChangeNotifier {
   }
 
   void getNext() {
-    current = WordPair.random();
+    // Only generate a new word pair if at the end of history
+    if (historyIndex >= history.length - 1) {
+      current = WordPair.random();
+      _addToHistory(current);
+    } else {
+      // Otherwise, move forward in history
+      historyIndex++;
+      current = history[historyIndex];
+    }
     notifyListeners();
+  }
+  
+  // Add a method to go back to the previous word pair
+  void getPrevious() {
+    // Make sure we have history to go back to
+    if (historyIndex > 0) {
+      historyIndex--;
+      current = history[historyIndex];
+      notifyListeners();
+    }
+  }
+  
+  // Helper method to add a word pair to history
+  void _addToHistory(WordPair pair) {
+    // If we're not at the end of history, truncate forward history
+    if (historyIndex < history.length - 1) {
+      history = history.sublist(0, historyIndex + 1);
+    }
+    
+    // Add the current pair to history
+    history.add(pair);
+    historyIndex = history.length - 1;
   }
 
   void toggleFavorite() {
@@ -208,6 +244,16 @@ class GeneratorPage extends StatelessWidget {
                 },
                 icon: Icon(icon),
                 label: Text('Like'),
+              ),
+              SizedBox(width: 10),
+              // Add Previous button
+              ElevatedButton(
+                onPressed: appState.historyIndex > 0 
+                  ? () {
+                      appState.getPrevious(); // go to previous word pair
+                    }
+                  : null, // Disable button if no history to go back to
+                child: Text('Previous'),
               ),
               SizedBox(width: 10),
               ElevatedButton(
